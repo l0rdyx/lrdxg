@@ -1,0 +1,311 @@
+---
+interface LightboxPhoto {
+  src: string;
+  srcset: string;
+  width: number;
+  height: number;
+  color: string;
+  title: string;
+  description: string;
+  location: string;
+}
+interface Props {
+  photos: LightboxPhoto[];
+  seriesTitle: string;
+}
+const { photos, seriesTitle } = Astro.props;
+// Экранируем "<", чтобы текст из yml/EXIF не мог закрыть <script>.
+const json = JSON.stringify(photos).replace(/</g, '\\u003c');
+---
+
+<script type="application/json" id="lightbox-data" set:html={json} />
+
+<dialog class="lightbox" aria-label={`${seriesTitle} — просмотр`}>
+  <div class="stage" tabindex="-1" autofocus>
+    <img class="lb-img" alt="" sizes="(max-width: 800px) 100vw, calc(100vw - 360px)" />
+    <button class="nav prev" type="button" aria-label="Предыдущая">←</button>
+    <button class="nav next" type="button" aria-label="Следующая">→</button>
+  </div>
+  <aside class="info">
+    <div class="counter"><span class="lb-n"></span> / {photos.length}</div>
+    <h2 class="lb-title"></h2>
+    <p class="lb-desc"></p>
+    <p class="lb-loc"><span class="pin" aria-hidden="true">●</span> <span class="lb-loc-text"></span></p>
+    <p class="series-name">{seriesTitle}</p>
+  </aside>
+  <button class="close" type="button" aria-label="Закрыть">✕</button>
+</dialog>
+
+<script>
+  type P = {
+    src: string;
+    srcset: string;
+    width: number;
+    height: number;
+    color: string;
+    title: string;
+    description: string;
+    location: string;
+  };
+
+  const dataEl = document.getElementById('lightbox-data');
+  const dlg = document.querySelector<HTMLDialogElement>('.lightbox');
+  if (dataEl && dlg) {
+    const photos: P[] = JSON.parse(dataEl.textContent || '[]');
+    const $ = <T extends Element>(s: string) => dlg.querySelector<T>(s)!;
+    const img = $<HTMLImageElement>('.lb-img');
+    const title = $<HTMLElement>('.lb-title');
+    const desc = $<HTMLElement>('.lb-desc');
+    const loc = $<HTMLElement>('.lb-loc');
+    const locText = $<HTMLElement>('.lb-loc-text');
+    const n = $<HTMLElement>('.lb-n');
+    let current = 0;
+    let opener: HTMLElement | null = null;
+
+    const preload = (i: number) => {
+      const p = photos[(i + photos.length) % photos.length];
+      const im = new Image();
+      im.sizes = img.sizes;
+      im.srcset = p.srcset;
+      im.src = p.src;
+    };
+
+    const show = (i: number) => {
+      current = (i + photos.length) % photos.length;
+      const p = photos[current];
+      img.classList.add('loading');
+      img.style.background = p.color;
+      img.width = p.width;
+      img.height = p.height;
+      img.srcset = p.srcset;
+      img.src = p.src;
+      img.alt = p.title || `Photo ${current + 1}`;
+      title.textContent = p.title;
+      title.hidden = !p.title;
+      desc.textContent = p.description;
+      desc.hidden = !p.description;
+      locText.textContent = p.location;
+      loc.hidden = !p.location;
+      n.textContent = String(current + 1);
+      history.replaceState(null, '', `#${current + 1}`);
+      preload(current + 1);
+      preload(current - 1);
+    };
+    img.addEventListener('load', () => img.classList.remove('loading'));
+
+    const open = (i: number, from?: HTMLElement) => {
+      opener = from ?? null;
+      show(i);
+      if (!dlg.open) dlg.showModal();
+      document.documentElement.style.overflow = 'hidden';
+    };
+    const close = () => dlg.close();
+    dlg.addEventListener('close', () => {
+      document.documentElement.style.overflow = '';
+      history.replaceState(null, '', location.pathname + location.search);
+      opener?.focus();
+    });
+
+    document.querySelectorAll<HTMLButtonElement>('.photo[data-index]').forEach((btn) =>
+      btn.addEventListener('click', () => open(Number(btn.dataset.index), btn)),
+    );
+    $<HTMLButtonElement>('.prev').addEventListener('click', () => show(current - 1));
+    $<HTMLButtonElement>('.next').addEventListener('click', () => show(current + 1));
+    $<HTMLButtonElement>('.close').addEventListener('click', close);
+    // клик по пустому месту вокруг фотки закрывает
+    $<HTMLElement>('.stage').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) close();
+    });
+
+    dlg.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') show(current + 1);
+      else if (e.key === 'ArrowLeft') show(current - 1);
+    });
+
+    // свайпы на телефоне
+    let x0: number | null = null;
+    dlg.addEventListener('touchstart', (e) => (x0 = e.touches[0].clientX), { passive: true });
+    dlg.addEventListener('touchend', (e) => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 50) show(current + (dx < 0 ? 1 : -1));
+      x0 = null;
+    });
+
+    // прямая ссылка на фотку: /series/slug/#3
+    const openFromHash = () => {
+      const i = parseInt(location.hash.slice(1), 10);
+      if (i >= 1 && i <= photos.length && !(dlg.open && i - 1 === current)) open(i - 1);
+    };
+    openFromHash();
+    window.addEventListener('hashchange', openFromHash);
+  }
+</script>
+
+<style>
+  .lightbox {
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: #0a0a0a;
+    color: #fff;
+    display: none;
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+  .lightbox[open] {
+    display: grid;
+    animation: fade 0.2s ease-out;
+  }
+  .lightbox::backdrop {
+    background: #0a0a0a;
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  .stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1rem, 3vw, 3rem);
+    min-height: 0;
+    outline: none;
+  }
+  .lb-img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    transition: opacity 0.25s;
+  }
+  .lb-img.loading {
+    opacity: 0.6;
+  }
+
+  .nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3rem;
+    height: 3rem;
+    font-size: 1.25rem;
+    color: #fff;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.15s, color 0.15s;
+  }
+  .nav:hover,
+  .nav:focus-visible {
+    opacity: 1;
+    color: var(--accent);
+  }
+  .prev {
+    left: 0.25rem;
+  }
+  .next {
+    right: 0.25rem;
+  }
+
+  .info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 5rem 2rem 2rem;
+    border-left: 1px solid #222;
+    overflow-y: auto;
+  }
+  .counter {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: #888;
+  }
+  .lb-title {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+  .lb-desc {
+    margin: 0;
+    color: #ccc;
+    line-height: 1.55;
+  }
+  .lb-loc {
+    margin: 0.5rem 0 0;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: #fff;
+  }
+  .pin {
+    color: var(--accent);
+    font-size: 0.7em;
+    vertical-align: 0.15em;
+  }
+  .series-name {
+    margin: auto 0 0;
+    padding-top: 2rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #666;
+  }
+  [hidden] {
+    display: none !important;
+  }
+
+  .close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1.1rem;
+    color: #fff;
+    background: transparent;
+    border: 1px solid #333;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .close:hover,
+  .close:focus-visible {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  @media (max-width: 800px) {
+    .lightbox[open] {
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(0, 1fr) auto;
+    }
+    .stage {
+      padding: 3.5rem 0 0.5rem;
+    }
+    .info {
+      border-left: 0;
+      border-top: 1px solid #222;
+      padding: 1rem 1rem 1.5rem;
+      max-height: 40dvh;
+    }
+    .lb-title {
+      font-size: 1.25rem;
+    }
+    .series-name {
+      display: none;
+    }
+    .nav {
+      display: none;
+    }
+  }
+</style>

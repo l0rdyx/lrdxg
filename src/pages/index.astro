@@ -1,0 +1,84 @@
+---
+import { Image } from 'astro:assets';
+import Base from '../layouts/Base.astro';
+import { getSeries } from '../lib/series';
+
+const series = await getSeries();
+---
+
+<Base>
+  <section class="grid" aria-label="Серии">
+    {
+      series.map((s, i) => (
+        <a class="card" href={`/series/${s.slug}/`}>
+          <div class="frame" style={`background:${s.bg}`}>
+            <Image
+              src={s.cover.image}
+              alt={s.cover.title || s.title}
+              widths={[480, 800, 1200]}
+              sizes="(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 33vw"
+              loading={i < 3 ? 'eager' : 'lazy'}
+            />
+          </div>
+          <div class="caption">
+            <span class="title">{s.title}</span>
+            <span class="meta">
+              {s.year && <>{s.year} · </>}
+              {s.photos.length}
+            </span>
+          </div>
+        </a>
+      ))
+    }
+  </section>
+</Base>
+
+<style>
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    gap: clamp(1rem, 3vw, 2.5rem);
+    padding: clamp(1rem, 4vw, 3rem) var(--gutter) 0;
+  }
+  .card {
+    text-decoration: none;
+    color: inherit;
+  }
+  .frame {
+    aspect-ratio: 4 / 5;
+    overflow: hidden;
+  }
+  .frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1), filter 0.3s;
+  }
+  .card:hover img,
+  .card:focus-visible img {
+    transform: scale(1.03);
+  }
+  .caption {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding-top: 0.6rem;
+    border-top: 2px solid transparent;
+    margin-top: 0.6rem;
+    transition: border-color 0.15s;
+  }
+  .card:hover .caption,
+  .card:focus-visible .caption {
+    border-top-color: var(--accent);
+  }
+  .title {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .meta {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+</style>
