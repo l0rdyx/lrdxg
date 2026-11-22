@@ -64,6 +64,8 @@ npm run dev        # http://localhost:4321
 4. *Save and Deploy*. Сайт будет на `<project>.pages.dev`; домен подключается в *Custom domains*.
 5. Поменяй `site` в `astro.config.mjs` на итоговый адрес (для превью-ссылок в соцсетях).
 
+Если Cloudflare предлагает **Workers** вместо Pages — тоже ок: Build command `npm run build`, Deploy command `npx wrangler deploy` (конфиг уже лежит в `wrangler.jsonc`).
+
 Дальше каждый пуш в `main` = автодеплой. Откат — *Deployments → Rollback* в Cloudflare или `git revert`.
 
 Альтернативы с тем же сценарием: Netlify, Vercel (у обоих меньше бесплатного трафика).
